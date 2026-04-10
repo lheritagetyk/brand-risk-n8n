@@ -1,0 +1,314 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Acme National Bank - Customer Lookup API",
+    "description": "Provides customer lookup by social media handle to enrich social media risk analysis. Allows the AI agent to determine if a social media author is an existing bank customer, their account tier, and relationship history.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://host.docker.internal:3100",
+      "description": "Local development (Docker accessible)"
+    }
+  ],
+  "paths": {
+    "/api/customers": {
+      "get": {
+        "operationId": "listCustomers",
+        "summary": "List all customers",
+        "description": "Returns all customers with optional filtering by tier or account type.",
+        "parameters": [
+          {
+            "name": "tier",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "standard",
+                "gold",
+                "platinum",
+                "private_banking"
+              ]
+            },
+            "description": "Filter by customer tier"
+          },
+          {
+            "name": "account_type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "checking",
+                "savings",
+                "business",
+                "premium",
+                "wealth_management"
+              ]
+            },
+            "description": "Filter by account type"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of customers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Customer"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCustomer",
+        "summary": "Create a new customer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "full_name"
+                ],
+                "properties": {
+                  "full_name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "social_handle_twitter": {
+                    "type": "string"
+                  },
+                  "social_handle_facebook": {
+                    "type": "string"
+                  },
+                  "social_handle_instagram": {
+                    "type": "string"
+                  },
+                  "account_type": {
+                    "type": "string",
+                    "enum": [
+                      "checking",
+                      "savings",
+                      "business",
+                      "premium",
+                      "wealth_management"
+                    ]
+                  },
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "gold",
+                      "platinum",
+                      "private_banking"
+                    ]
+                  },
+                  "customer_since": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Customer created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Customer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers/lookup/{handle}": {
+      "get": {
+        "operationId": "lookupCustomerByHandle",
+        "summary": "Look up customer by social media handle",
+        "description": "Searches for a bank customer matching the given social media handle across Twitter, Facebook, and Instagram. Returns customer details including tier and account type if found. The @ prefix is optional and will be stripped automatically.",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Social media handle (with or without @ prefix)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lookup result - found or not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Returns found=true with customer object if matched, or found=false with a message if not.",
+                  "properties": {
+                    "found": {
+                      "type": "boolean",
+                      "description": "Whether a customer was found for this handle"
+                    },
+                    "customer": {
+                      "$ref": "#/components/schemas/Customer"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Message when no customer is found"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers/{id}": {
+      "get": {
+        "operationId": "getCustomer",
+        "summary": "Get customer by ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Customer"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "social_handle_twitter": {
+            "type": "string"
+          },
+          "social_handle_facebook": {
+            "type": "string"
+          },
+          "social_handle_instagram": {
+            "type": "string"
+          },
+          "account_type": {
+            "type": "string",
+            "enum": [
+              "checking",
+              "savings",
+              "business",
+              "premium",
+              "wealth_management"
+            ]
+          },
+          "account_status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "suspended",
+              "closed"
+            ]
+          },
+          "customer_since": {
+            "type": "string",
+            "format": "date"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "gold",
+              "platinum",
+              "private_banking"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

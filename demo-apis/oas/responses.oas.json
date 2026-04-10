@@ -1,0 +1,293 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Acme National Bank - Public Response Management API",
+    "description": "Manages AI-drafted public responses to social media posts. Responses go through a draft, approved, then posted workflow, ensuring human review before any public reply is made on behalf of the bank.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://host.docker.internal:3100",
+      "description": "Local development (Docker accessible)"
+    }
+  ],
+  "paths": {
+    "/api/responses": {
+      "get": {
+        "operationId": "listResponses",
+        "summary": "List drafted responses",
+        "description": "Returns all public responses with the original post content. Filter by approval status.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "approved",
+                "posted",
+                "rejected"
+              ]
+            },
+            "description": "Filter by response status"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of responses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ResponseWithPost"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "draftResponse",
+        "summary": "Draft a public response",
+        "description": "Creates a new draft response for a social media post. Typically called by the AI workflow after analysis.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "post_id",
+                  "response_text"
+                ],
+                "properties": {
+                  "post_id": {
+                    "type": "integer",
+                    "description": "ID of the social media post being responded to"
+                  },
+                  "response_text": {
+                    "type": "string",
+                    "description": "The drafted public response text"
+                  },
+                  "response_platform": {
+                    "type": "string",
+                    "description": "Platform to post on, defaults to same as original post"
+                  },
+                  "drafted_by": {
+                    "type": "string",
+                    "description": "Who drafted this response, such as ai, n8n-ai-workflow, or human"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Response drafted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/responses/{id}": {
+      "patch": {
+        "operationId": "updateResponseStatus",
+        "summary": "Approve, reject, or mark response as posted",
+        "description": "Updates the status of a drafted response.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "draft",
+                      "approved",
+                      "posted",
+                      "rejected"
+                    ]
+                  },
+                  "approved_by": {
+                    "type": "string",
+                    "description": "Name of the person who approved or rejected"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PublicResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "post_id": {
+            "type": "integer"
+          },
+          "response_text": {
+            "type": "string"
+          },
+          "response_platform": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "approved",
+              "posted",
+              "rejected"
+            ]
+          },
+          "drafted_by": {
+            "type": "string"
+          },
+          "approved_by": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posted_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ResponseWithPost": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "post_id": {
+            "type": "integer"
+          },
+          "response_text": {
+            "type": "string"
+          },
+          "response_platform": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "approved",
+              "posted",
+              "rejected"
+            ]
+          },
+          "drafted_by": {
+            "type": "string"
+          },
+          "approved_by": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "original_post": {
+            "type": "string"
+          },
+          "author_handle": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,578 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Acme National Bank - Social Media Posts API",
+    "description": "Manages the incoming social media post feed for Acme National Bank's brand risk monitoring system. Posts are collected from Twitter, Facebook, Instagram, Reddit, and LinkedIn.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://host.docker.internal:3100",
+      "description": "Local development (Docker accessible)"
+    }
+  ],
+  "paths": {
+    "/api/social-posts": {
+      "get": {
+        "operationId": "listSocialPosts",
+        "summary": "List social media posts",
+        "description": "Returns a paginated list of social media posts mentioning Acme National Bank, with optional filtering by status, platform, and priority.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "new",
+                "reviewed",
+                "responded",
+                "escalated",
+                "resolved"
+              ]
+            },
+            "description": "Filter by post review status"
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "twitter",
+                "facebook",
+                "instagram",
+                "reddit",
+                "linkedin"
+              ]
+            },
+            "description": "Filter by social media platform"
+          },
+          {
+            "name": "priority",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "low",
+                "normal",
+                "high",
+                "critical"
+              ]
+            },
+            "description": "Filter by priority level"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Only return posts after this timestamp"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            },
+            "description": "Maximum number of posts to return"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Number of posts to skip for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of social media posts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "posts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SocialPost"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSocialPost",
+        "summary": "Create a new social media post",
+        "description": "Adds a new social media post to the monitoring feed. Simulates incoming posts from social media platforms.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "platform",
+                  "author_handle",
+                  "author_name",
+                  "content"
+                ],
+                "properties": {
+                  "platform": {
+                    "type": "string",
+                    "enum": [
+                      "twitter",
+                      "facebook",
+                      "instagram",
+                      "reddit",
+                      "linkedin"
+                    ]
+                  },
+                  "author_handle": {
+                    "type": "string",
+                    "description": "Social media username without @ prefix"
+                  },
+                  "author_name": {
+                    "type": "string",
+                    "description": "Display name of the author"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "Full text content of the post"
+                  },
+                  "post_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "URL to the original post"
+                  },
+                  "likes": {
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "shares": {
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "comments_count": {
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "posted_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "When the post was originally published"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Post created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialPost"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/social-posts/unreviewed": {
+      "get": {
+        "operationId": "getUnreviewedPosts",
+        "summary": "Get unreviewed posts",
+        "description": "Returns all posts that have not yet been analyzed by the AI risk analyst. These are posts with status 'new' and no corresponding analysis result.",
+        "responses": {
+          "200": {
+            "description": "List of unreviewed posts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "posts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SocialPost"
+                      }
+                    },
+                    "count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/social-posts/{id}": {
+      "get": {
+        "operationId": "getSocialPost",
+        "summary": "Get a social media post by ID",
+        "description": "Returns the full details of a social media post including any analysis results and drafted responses.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Post ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post with analysis and responses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "post": {
+                      "$ref": "#/components/schemas/SocialPost"
+                    },
+                    "analysis": {
+                      "$ref": "#/components/schemas/AnalysisResult"
+                    },
+                    "responses": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PublicResponse"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateSocialPost",
+        "summary": "Update post status or priority",
+        "description": "Updates the review status or priority of a social media post.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "new",
+                      "reviewed",
+                      "responded",
+                      "escalated",
+                      "resolved"
+                    ]
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "normal",
+                      "high",
+                      "critical"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated post",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialPost"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSocialPost",
+        "summary": "Delete a social media post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SocialPost": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "twitter",
+              "facebook",
+              "instagram",
+              "reddit",
+              "linkedin"
+            ]
+          },
+          "author_handle": {
+            "type": "string"
+          },
+          "author_name": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "post_url": {
+            "type": "string"
+          },
+          "likes": {
+            "type": "integer"
+          },
+          "shares": {
+            "type": "integer"
+          },
+          "comments_count": {
+            "type": "integer"
+          },
+          "posted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "collected_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "new",
+              "reviewed",
+              "responded",
+              "escalated",
+              "resolved"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "low",
+              "normal",
+              "high",
+              "critical"
+            ]
+          }
+        }
+      },
+      "AnalysisResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "post_id": {
+            "type": "integer"
+          },
+          "is_banking_related": {
+            "type": "integer"
+          },
+          "sentiment": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "neutral",
+              "negative",
+              "critical"
+            ]
+          },
+          "issue_category": {
+            "type": "string"
+          },
+          "confidence_score": {
+            "type": "number"
+          },
+          "key_topics": {
+            "type": "string"
+          },
+          "suggested_response": {
+            "type": "string"
+          },
+          "escalation_target": {
+            "type": "string",
+            "enum": [
+              "pr_team",
+              "security_team",
+              "customer_support",
+              "no_escalation"
+            ]
+          },
+          "analyzed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "analyzed_by": {
+            "type": "string"
+          }
+        }
+      },
+      "PublicResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "post_id": {
+            "type": "integer"
+          },
+          "response_text": {
+            "type": "string"
+          },
+          "response_platform": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "approved",
+              "posted",
+              "rejected"
+            ]
+          },
+          "drafted_by": {
+            "type": "string"
+          },
+          "approved_by": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posted_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

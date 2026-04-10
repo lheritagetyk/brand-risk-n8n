@@ -1,0 +1,462 @@
+{
+  "name": "Acme Bank - Social Media Risk Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "3806a5b7-7793-40ba-a82c-2eb71b212b34",
+      "name": "Poll Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:3100/api/social-posts/unreviewed",
+        "options": {}
+      },
+      "id": "cc4a74fd-b5e2-42ff-bb07-14689b7c25a8",
+      "name": "Fetch Unreviewed Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "posts",
+        "options": {}
+      },
+      "id": "50a0554a-8cb0-4cab-812b-d581a6556211",
+      "name": "Split Posts",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// PII Redaction Filter\n// Scrubs sensitive data from social media posts before sending to the LLM.\n// The LLM never sees raw PII - it analyzes sentiment and intent from redacted text.\n\nconst item = $input.item.json;\nlet content = item.content || '';\nlet authorName = item.author_name || '';\nconst redactions = [];\n\n// --- Patterns to redact ---\n\n// Social Security Numbers (XXX-XX-XXXX or XXXXXXXXX)\nconst ssnPattern = /\\b\\d{3}[-\\s]?\\d{2}[-\\s]?\\d{4}\\b/g;\ncontent = content.replace(ssnPattern, (match) => {\n  redactions.push({ type: 'SSN', original: match });\n  return '[SSN REDACTED]';\n});\n\n// Credit/Debit card numbers (13-19 digits, with optional spaces/dashes)\nconst cardPattern = /\\b(?:\\d{4}[-\\s]?){3,4}\\d{1,4}\\b/g;\ncontent = content.replace(cardPattern, (match) => {\n  // Avoid matching dates and other short number sequences\n  const digits = match.replace(/\\D/g, '');\n  if (digits.length >= 13 && digits.length <= 19) {\n    redactions.push({ type: 'CARD_NUMBER', last4: digits.slice(-4) });\n    return '[CARD ****' + digits.slice(-4) + ']';\n  }\n  return match;\n});\n\n// Bank account numbers (7-17 digit sequences preceded by keywords)\nconst acctPattern = /(?:account|acct|acct\\.?)\\s*#?\\s*(\\d{7,17})/gi;\ncontent = content.replace(acctPattern, (match, num) => {\n  redactions.push({ type: 'ACCOUNT_NUMBER', last4: num.slice(-4) });\n  return 'account [ACCT ****' + num.slice(-4) + ']';\n});\n\n// Routing numbers (9 digits preceded by keyword)\nconst routingPattern = /(?:routing|aba|transit)\\s*#?\\s*(\\d{9})\\b/gi;\ncontent = content.replace(routingPattern, (match) => {\n  redactions.push({ type: 'ROUTING_NUMBER' });\n  return '[ROUTING REDACTED]';\n});\n\n// Email addresses\nconst emailPattern = /[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g;\ncontent = content.replace(emailPattern, (match) => {\n  redactions.push({ type: 'EMAIL', domain: match.split('@')[1] });\n  return '[EMAIL REDACTED]';\n});\n\n// Phone numbers (various US formats)\nconst phonePattern = /(?:\\+?1[-\\s.]?)?(?:\\(?\\d{3}\\)?[-\\s.]?)\\d{3}[-\\s.]?\\d{4}\\b/g;\ncontent = content.replace(phonePattern, (match) => {\n  redactions.push({ type: 'PHONE' });\n  return '[PHONE REDACTED]';\n});\n\n// Street addresses (number + street name + common suffixes)\nconst addressPattern = /\\b\\d{1,5}\\s+[A-Z][a-zA-Z]+\\s+(?:St|Street|Ave|Avenue|Blvd|Boulevard|Dr|Drive|Ln|Lane|Rd|Road|Way|Ct|Court|Pl|Place)\\.?(?:\\s+(?:Apt|Suite|Unit|#)\\s*\\w+)?\\b/g;\ncontent = content.replace(addressPattern, (match) => {\n  redactions.push({ type: 'ADDRESS' });\n  return '[ADDRESS REDACTED]';\n});\n\n// Date of birth patterns (MM/DD/YYYY, MM-DD-YYYY preceded by DOB/born/birthday)\nconst dobPattern = /(?:dob|born|birthday|date of birth)[:\\s]+\\d{1,2}[\\/\\-]\\d{1,2}[\\/\\-]\\d{2,4}/gi;\ncontent = content.replace(dobPattern, (match) => {\n  redactions.push({ type: 'DOB' });\n  return '[DOB REDACTED]';\n});\n\n// Dollar amounts over $1000 (could indicate account balances)\nconst largeAmountPattern = /\\$\\d{1,3}(?:,\\d{3})+(?:\\.\\d{2})?/g;\ncontent = content.replace(largeAmountPattern, (match) => {\n  redactions.push({ type: 'LARGE_AMOUNT', original: match });\n  return '[AMOUNT REDACTED]';\n});\n\nreturn {\n  json: {\n    ...item,\n    content: content,\n    original_content: item.content,\n    author_name: authorName,\n    pii_redacted: redactions.length > 0,\n    pii_redaction_count: redactions.length,\n    pii_redaction_types: redactions.map(r => r.type),\n    pii_redactions: redactions\n  }\n};"
+      },
+      "id": "pii-filter",
+      "name": "PII Redaction Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this social media post for Acme National Bank.\n\nPost ID: {{ $json.id }}\nPlatform: {{ $json.platform }}\nAuthor: {{ $json.author_name }} (@{{ $json.author_handle }})\nContent: {{ $json.content }}\nLikes: {{ $json.likes }} | Shares: {{ $json.shares }} | Comments: {{ $json.comments_count }}\n\nSTEP 1: Call lookupCustomerByHandle with handle \"{{ $json.author_handle }}\" to check if this is a bank customer.\nSTEP 2: Call getActiveIncidents to check for known issues.\nSTEP 3: Based on the tool results, respond with ONLY a JSON object (no markdown, no explanation) with these exact fields:\n{\n  \"is_banking_related\": \"yes\" or \"no\",\n  \"sentiment\": \"positive\" or \"neutral\" or \"negative\" or \"critical\",\n  \"issue_category\": \"Service Outage\" or \"Security Concern\" or \"Fee Complaint\" or \"App Bug\" or \"Fraud Report\" or \"Other\",\n  \"confidence_score\": \"0.92\",\n  \"key_topics\": \"topic1, topic2\",\n  \"suggested_response\": \"your empathetic public reply for negative/critical posts, brief thanks for positive, No response needed for neutral\",\n  \"escalation_target\": \"security_team\" or \"pr_team\" or \"customer_support\" or \"no_escalation\"\n}\n\nEscalation rules: security/fraud/phishing -> security_team, high-engagement negative (>100 likes or >50 shares) -> pr_team, service complaints from identified customers -> customer_support, positive/neutral -> no_escalation. Platinum/private banking customers with complaints always escalate to customer_support.",
+        "hasOutputParser": false,
+        "options": {
+          "systemMessage": "You are a social media risk analyst for Acme National Bank. Use your MCP tools to look up the customer and check active incidents, then return your analysis as a JSON object. Only return the JSON, nothing else."
+        }
+      },
+      "id": "8ca22d33-d827-4a7a-bf68-81661b979eea",
+      "name": "AI Risk Analyst Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-haiku-4-5-20251001",
+          "mode": ""
+        },
+        "options": {
+          "maxTokensToSample": 4096,
+          "temperature": 0.1
+        }
+      },
+      "id": "53ae9a6d-b892-4b85-8fcd-9b55194a4d38",
+      "name": "Anthropic Claude",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        592,
+        224
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "8KwhjvO35ZC0gSBR",
+          "name": "LauraPrivateClaude"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://host.docker.internal:9091/tools/acme-national-bank-known-incidents-api/mcp",
+        "authentication": "bearerAuth",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.2,
+      "position": [
+        704,
+        192
+      ],
+      "id": "f6ba2342-6632-474d-8bb7-cb767c057014",
+      "name": "Incidents",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "HzpWoRa1XI1KyeAJ",
+          "name": "ACMEMCPTools"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://host.docker.internal:9091/tools/acme-national-bank-customer-lookup-api/mcp",
+        "authentication": "bearerAuth",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.2,
+      "position": [
+        1120,
+        96
+      ],
+      "id": "7dbb828b-da9e-4529-9f0e-7d12d148cd0e",
+      "name": "customer lookup",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "HzpWoRa1XI1KyeAJ",
+          "name": "ACMEMCPTools"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the AI agent output and merge with post data\nconst postId = $('Split Posts').item.json.id;\nconst platform = $('Split Posts').item.json.platform;\nconst agentOutput = $input.item.json.output;\n\n// Parse JSON from agent - handle markdown code blocks\nlet analysis;\ntry {\n  let text = agentOutput;\n  // Strip markdown code blocks if present\n  const jsonMatch = text.match(/```(?:json)?\\s*([\\s\\S]*?)```/);\n  if (jsonMatch) text = jsonMatch[1];\n  // Strip any leading/trailing non-JSON text\n  const braceStart = text.indexOf('{');\n  const braceEnd = text.lastIndexOf('}');\n  if (braceStart !== -1 && braceEnd !== -1) {\n    text = text.substring(braceStart, braceEnd + 1);\n  }\n  analysis = JSON.parse(text);\n} catch(e) {\n  // Fallback: extract what we can\n  analysis = {\n    is_banking_related: 'yes',\n    sentiment: 'neutral',\n    issue_category: 'Other',\n    confidence_score: '0.5',\n    key_topics: 'parse error',\n    suggested_response: 'No response needed',\n    escalation_target: 'no_escalation'\n  };\n}\n\nreturn {\n  json: {\n    post_id: postId,\n    platform: platform,\n    is_banking_related: analysis.is_banking_related || 'yes',\n    sentiment: analysis.sentiment || 'neutral',\n    issue_category: analysis.issue_category || 'Other',\n    confidence_score: analysis.confidence_score || '0.8',\n    key_topics: analysis.key_topics || '',\n    suggested_response: analysis.suggested_response || 'No response needed',\n    escalation_target: analysis.escalation_target || 'no_escalation'\n  }\n};"
+      },
+      "id": "parse-output",
+      "name": "Parse Agent Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3100/api/analysis",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ post_id: $json.post_id, is_banking_related: $json.is_banking_related, sentiment: $json.sentiment, issue_category: $json.issue_category, confidence_score: $json.confidence_score, key_topics: $json.key_topics, suggested_response: $json.suggested_response, escalation_target: $json.escalation_target }) }}",
+        "options": {}
+      },
+      "id": "save-analysis",
+      "name": "Save Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "needs-escalation",
+              "leftValue": "={{ $json.escalation_target }}",
+              "rightValue": "no_escalation",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-escalation",
+      "name": "Needs Escalation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3100/api/escalations",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ post_id: $('Parse Agent Output').item.json.post_id, escalation_target: $('Parse Agent Output').item.json.escalation_target, severity: $('Parse Agent Output').item.json.sentiment === 'critical' ? 'critical' : 'medium', notes: 'Auto-escalated by AI. Issue: ' + $('Parse Agent Output').item.json.issue_category + '. Topics: ' + $('Parse Agent Output').item.json.key_topics }) }}",
+        "options": {}
+      },
+      "id": "create-escalation",
+      "name": "Create Escalation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1620,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-response",
+              "leftValue": "={{ $('Parse Agent Output').item.json.suggested_response }}",
+              "rightValue": "No response needed",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-response",
+      "name": "Response Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1620,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3100/api/responses",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ post_id: $('Parse Agent Output').item.json.post_id, response_text: $('Parse Agent Output').item.json.suggested_response, response_platform: $('Parse Agent Output').item.json.platform, drafted_by: 'n8n-ai-workflow' }) }}",
+        "options": {}
+      },
+      "id": "save-response",
+      "name": "Save Draft Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1840,
+        100
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Poll Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch Unreviewed Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Unreviewed Posts": {
+      "main": [
+        [
+          {
+            "node": "Split Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Posts": {
+      "main": [
+        [
+          {
+            "node": "PII Redaction Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PII Redaction Filter": {
+      "main": [
+        [
+          {
+            "node": "AI Risk Analyst Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Risk Analyst Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Agent Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Agent Output": {
+      "main": [
+        [
+          {
+            "node": "Save Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Analysis": {
+      "main": [
+        [
+          {
+            "node": "Needs Escalation?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Escalation?": {
+      "main": [
+        [
+          {
+            "node": "Create Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Needed?": {
+      "main": [
+        [
+          {
+            "node": "Save Draft Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Claude": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Risk Analyst Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Incidents": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Risk Analyst Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "customer lookup": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Risk Analyst Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5e70940e-136c-459d-b937-bfacb9aaa084",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4476a944875726f60a9bafca819ea20395f7963fd204886488c1e4d58cc830b0"
+  },
+  "id": "IRjs7dBxD4Wo9nKg",
+  "tags": [
+    {
+      "name": "social-media",
+      "id": "HJOyqJdzluA5nXFO",
+      "updatedAt": "2026-04-09T17:39:56.326Z",
+      "createdAt": "2026-04-09T17:39:56.326Z"
+    },
+    {
+      "updatedAt": "2026-01-22T21:11:45.602Z",
+      "createdAt": "2026-01-22T21:11:45.602Z",
+      "id": "L0QoQQrCgcyOGDs4",
+      "name": "ai-agent"
+    },
+    {
+      "updatedAt": "2026-01-22T21:11:45.597Z",
+      "createdAt": "2026-01-22T21:11:45.597Z",
+      "id": "Y9gJKGujTkXeJDOb",
+      "name": "mcp"
+    },
+    {
+      "name": "risk-monitoring",
+      "id": "k0ebRdGvbBiy7iAJ",
+      "updatedAt": "2026-04-09T17:39:56.322Z",
+      "createdAt": "2026-04-09T17:39:56.322Z"
+    }
+  ]
+}

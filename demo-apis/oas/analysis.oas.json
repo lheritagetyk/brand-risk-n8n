@@ -1,0 +1,404 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Acme National Bank - Sentiment Analysis API",
+    "description": "Stores and retrieves AI-generated sentiment analysis results for social media posts. The N8N AI workflow writes analysis results here after processing each post.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://host.docker.internal:3100",
+      "description": "Local development (Docker accessible)"
+    }
+  ],
+  "paths": {
+    "/api/analysis": {
+      "get": {
+        "operationId": "listAnalysisResults",
+        "summary": "List all analysis results",
+        "description": "Returns analysis results joined with post details. Filter by sentiment, escalation target, or whether the post is banking-related.",
+        "parameters": [
+          {
+            "name": "sentiment",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "positive",
+                "neutral",
+                "negative",
+                "critical"
+              ]
+            }
+          },
+          {
+            "name": "escalation_target",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pr_team",
+                "security_team",
+                "customer_support",
+                "no_escalation"
+              ]
+            }
+          },
+          {
+            "name": "is_banking_related",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                0,
+                1
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Analysis results with post context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AnalysisResultWithPost"
+                      }
+                    },
+                    "count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "saveAnalysisResult",
+        "summary": "Save an analysis result",
+        "description": "Stores the AI-generated analysis for a social media post. If an analysis already exists for the given post_id, it will be updated. Also sets the post status to 'reviewed'.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "post_id",
+                  "is_banking_related"
+                ],
+                "properties": {
+                  "post_id": {
+                    "type": "string",
+                    "description": "ID of the social media post being analyzed, e.g. 42"
+                  },
+                  "is_banking_related": {
+                    "type": "string",
+                    "description": "yes if the post is related to banking or Acme National Bank, no if not"
+                  },
+                  "sentiment": {
+                    "type": "string",
+                    "description": "One of: positive, neutral, negative, critical"
+                  },
+                  "issue_category": {
+                    "type": "string",
+                    "description": "One of: Service Outage, Security Concern, Fee Complaint, App Bug, Fraud Report, Other"
+                  },
+                  "confidence_score": {
+                    "type": "string",
+                    "description": "Confidence as a decimal string, e.g. 0.92"
+                  },
+                  "key_topics": {
+                    "type": "string",
+                    "description": "Comma-separated key topics identified in the post"
+                  },
+                  "suggested_response": {
+                    "type": "string",
+                    "description": "AI-drafted public response for the post"
+                  },
+                  "escalation_target": {
+                    "type": "string",
+                    "description": "One of: pr_team, security_team, customer_support, no_escalation"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Analysis result created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisResult"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Existing analysis result updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/summary": {
+      "get": {
+        "operationId": "getAnalysisSummary",
+        "summary": "Get dashboard summary statistics",
+        "description": "Returns aggregate statistics across all analyzed posts: counts by sentiment, escalation target, issue category, and total needing escalation. Useful for dashboards.",
+        "responses": {
+          "200": {
+            "description": "Summary statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total_analyzed": {
+                      "type": "integer"
+                    },
+                    "by_sentiment": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sentiment": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "by_escalation": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "escalation_target": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "by_category": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "issue_category": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "needing_escalation": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/{postId}": {
+      "get": {
+        "operationId": "getAnalysisByPostId",
+        "summary": "Get analysis for a specific post",
+        "description": "Returns the analysis result for a given social media post ID.",
+        "parameters": [
+          {
+            "name": "postId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The social media post ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Analysis result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No analysis found for this post",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalysisResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "post_id": {
+            "type": "integer"
+          },
+          "is_banking_related": {
+            "type": "integer",
+            "description": "1 = yes, 0 = no"
+          },
+          "sentiment": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "neutral",
+              "negative",
+              "critical"
+            ]
+          },
+          "issue_category": {
+            "type": "string"
+          },
+          "confidence_score": {
+            "type": "number"
+          },
+          "key_topics": {
+            "type": "string"
+          },
+          "suggested_response": {
+            "type": "string"
+          },
+          "escalation_target": {
+            "type": "string",
+            "enum": [
+              "pr_team",
+              "security_team",
+              "customer_support",
+              "no_escalation"
+            ]
+          },
+          "analyzed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "analyzed_by": {
+            "type": "string"
+          }
+        }
+      },
+      "AnalysisResultWithPost": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "post_id": {
+            "type": "integer"
+          },
+          "is_banking_related": {
+            "type": "integer",
+            "description": "1 = yes, 0 = no"
+          },
+          "sentiment": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "neutral",
+              "negative",
+              "critical"
+            ]
+          },
+          "issue_category": {
+            "type": "string"
+          },
+          "confidence_score": {
+            "type": "number"
+          },
+          "key_topics": {
+            "type": "string"
+          },
+          "suggested_response": {
+            "type": "string"
+          },
+          "escalation_target": {
+            "type": "string",
+            "enum": [
+              "pr_team",
+              "security_team",
+              "customer_support",
+              "no_escalation"
+            ]
+          },
+          "analyzed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "analyzed_by": {
+            "type": "string"
+          },
+          "post_content": {
+            "type": "string"
+          },
+          "author_handle": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

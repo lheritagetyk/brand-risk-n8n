@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acme National Bank - Social Media Risk Monitor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+    .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 20px 32px; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { font-size: 22px; font-weight: 600; }
+    .header .subtitle { color: #a0aec0; font-size: 13px; margin-top: 2px; }
+    .header .actions { display: flex; gap: 12px; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    .stats-bar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; padding: 20px 32px; }
+    .stat-card { background: white; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 4px; }
+    .stat-card .value { font-size: 28px; font-weight: 700; }
+    .stat-card.critical .value { color: #dc2626; }
+    .stat-card.negative .value { color: #f59e0b; }
+    .stat-card.positive .value { color: #10b981; }
+    .stat-card.escalation .value { color: #8b5cf6; }
+
+    .main { padding: 0 32px 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .panel { background: white; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
+    .panel-header { padding: 14px 18px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .panel-header h2 { font-size: 15px; font-weight: 600; }
+    .panel-header .badge { background: #e5e7eb; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+    .panel-body { max-height: 500px; overflow-y: auto; }
+    .panel.full-width { grid-column: 1 / -1; }
+
+    .post-item { padding: 14px 18px; border-bottom: 1px solid #f1f5f9; transition: background 0.15s; }
+    .post-item:hover { background: #f8fafc; }
+    .post-item:last-child { border-bottom: none; }
+    .post-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+    .post-meta .author { font-weight: 600; font-size: 13px; }
+    .post-meta .handle { color: #64748b; font-size: 12px; }
+    .post-content { font-size: 13px; line-height: 1.5; margin-bottom: 8px; }
+    .post-footer { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .tag-platform { background: #e0f2fe; color: #0369a1; }
+    .tag-critical { background: #fef2f2; color: #dc2626; }
+    .tag-negative { background: #fffbeb; color: #d97706; }
+    .tag-positive { background: #ecfdf5; color: #059669; }
+    .tag-neutral { background: #f1f5f9; color: #475569; }
+    .tag-security { background: #fef2f2; color: #dc2626; }
+    .tag-pr { background: #faf5ff; color: #7c3aed; }
+    .tag-support { background: #eff6ff; color: #2563eb; }
+    .tag-new { background: #dbeafe; color: #1d4ed8; }
+    .tag-reviewed { background: #e0f2fe; color: #0369a1; }
+    .tag-escalated { background: #fee2e2; color: #dc2626; }
+    .tag-responded { background: #d1fae5; color: #059669; }
+    .tag-resolved { background: #f0fdf4; color: #16a34a; }
+
+    .response-item { padding: 14px 18px; border-bottom: 1px solid #f1f5f9; }
+    .response-item .response-text { font-size: 13px; line-height: 1.5; background: #f8fafc; padding: 10px; border-radius: 6px; margin: 8px 0; border-left: 3px solid #3b82f6; }
+    .response-item .meta { font-size: 11px; color: #64748b; }
+
+    .escalation-item { padding: 14px 18px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .escalation-item .esc-info { flex: 1; }
+    .escalation-item .esc-info .notes { font-size: 12px; color: #64748b; margin-top: 4px; }
+    .severity-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .severity-critical { background: #dc2626; }
+    .severity-high { background: #f59e0b; }
+    .severity-medium { background: #3b82f6; }
+    .severity-low { background: #10b981; }
+
+    .empty-state { padding: 40px; text-align: center; color: #94a3b8; font-size: 14px; }
+    .refresh-note { text-align: center; padding: 8px; font-size: 11px; color: #94a3b8; }
+    .incident-item { padding: 12px 18px; border-bottom: 1px solid #f1f5f9; }
+    .incident-item .inc-title { font-weight: 600; font-size: 13px; }
+    .incident-item .inc-desc { font-size: 12px; color: #64748b; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>Acme National Bank - Social Media Risk Monitor</h1>
+      <div class="subtitle">Real-time brand risk analysis powered by AI</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" onclick="refreshAll()">Refresh Dashboard</button>
+      <button class="btn btn-danger" onclick="resetData()">Reset Demo Data</button>
+    </div>
+  </div>
+
+  <div class="stats-bar" id="stats-bar">
+    <div class="stat-card"><div class="label">Total Posts</div><div class="value" id="stat-total">-</div></div>
+    <div class="stat-card"><div class="label">Analyzed</div><div class="value" id="stat-analyzed">-</div></div>
+    <div class="stat-card critical"><div class="label">Critical</div><div class="value" id="stat-critical">-</div></div>
+    <div class="stat-card negative"><div class="label">Negative</div><div class="value" id="stat-negative">-</div></div>
+    <div class="stat-card positive"><div class="label">Positive</div><div class="value" id="stat-positive">-</div></div>
+    <div class="stat-card escalation"><div class="label">Escalations</div><div class="value" id="stat-escalations">-</div></div>
+  </div>
+
+  <div class="main">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Unreviewed Posts</h2>
+        <span class="badge" id="unreviewed-count">0</span>
+      </div>
+      <div class="panel-body" id="unreviewed-list"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Analyzed Posts</h2>
+        <span class="badge" id="analyzed-count">0</span>
+      </div>
+      <div class="panel-body" id="analyzed-list"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Escalations</h2>
+        <span class="badge" id="escalation-count">0</span>
+      </div>
+      <div class="panel-body" id="escalation-list"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Draft Responses</h2>
+        <span class="badge" id="response-count">0</span>
+      </div>
+      <div class="panel-body" id="response-list"></div>
+    </div>
+
+    <div class="panel full-width">
+      <div class="panel-header">
+        <h2>Active Incidents</h2>
+        <span class="badge" id="incident-count">0</span>
+      </div>
+      <div class="panel-body" id="incident-list"></div>
+    </div>
+  </div>
+
+  <div class="refresh-note">Auto-refreshes every 15 seconds</div>
+
+  <script>
+    const API = '';
+
+    async function fetchJSON(url) {
+      const res = await fetch(API + url);
+      return res.json();
+    }
+
+    async function loadStats() {
+      const health = await fetchJSON('/api/health');
+      document.getElementById('stat-total').textContent = health.data.posts;
+
+      try {
+        const summary = await fetchJSON('/api/analysis/summary');
+        document.getElementById('stat-analyzed').textContent = summary.total_analyzed;
+        document.getElementById('stat-escalations').textContent = summary.needing_escalation;
+
+        const sentimentMap = {};
+        summary.by_sentiment.forEach(s => sentimentMap[s.sentiment] = s.count);
+        document.getElementById('stat-critical').textContent = sentimentMap['critical'] || 0;
+        document.getElementById('stat-negative').textContent = sentimentMap['negative'] || 0;
+        document.getElementById('stat-positive').textContent = sentimentMap['positive'] || 0;
+      } catch(e) {
+        console.error('Stats error:', e);
+      }
+    }
+
+    async function loadUnreviewed() {
+      const data = await fetchJSON('/api/social-posts/unreviewed?limit=50');
+      const container = document.getElementById('unreviewed-list');
+      document.getElementById('unreviewed-count').textContent = data.remaining || data.count;
+
+      if (!data.posts.length) {
+        container.innerHTML = '<div class="empty-state">All posts have been reviewed!</div>';
+        return;
+      }
+
+      container.innerHTML = data.posts.map(p => `
+        <div class="post-item">
+          <div class="post-meta">
+            <span class="author">${esc(p.author_name)}</span>
+            <span class="handle">@${esc(p.author_handle)}</span>
+            <span class="tag tag-platform">${p.platform}</span>
+            <span class="tag tag-${p.priority}">${p.priority}</span>
+          </div>
+          <div class="post-content">${esc(p.content)}</div>
+          <div class="post-footer">
+            <span style="font-size:12px;color:#64748b">${p.likes} likes &middot; ${p.shares} shares &middot; ${p.comments_count} comments</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadAnalyzed() {
+      const data = await fetchJSON('/api/analysis');
+      const container = document.getElementById('analyzed-list');
+      document.getElementById('analyzed-count').textContent = data.count;
+
+      if (!data.results.length) {
+        container.innerHTML = '<div class="empty-state">No posts analyzed yet. Run the N8N workflow!</div>';
+        return;
+      }
+
+      container.innerHTML = data.results.map(a => `
+        <div class="post-item">
+          <div class="post-meta">
+            <span class="author">@${esc(a.author_handle)}</span>
+            <span class="tag tag-platform">${a.platform}</span>
+            <span class="tag tag-${a.sentiment}">${a.sentiment}</span>
+            ${a.issue_category ? `<span class="tag" style="background:#f1f5f9">${a.issue_category}</span>` : ''}
+            ${a.escalation_target !== 'no_escalation' ? `<span class="tag tag-${a.escalation_target === 'security_team' ? 'security' : a.escalation_target === 'pr_team' ? 'pr' : 'support'}">${a.escalation_target.replace('_', ' ')}</span>` : ''}
+          </div>
+          <div class="post-content">${esc(a.post_content)}</div>
+          <div class="post-footer">
+            <span style="font-size:12px;color:#64748b">Confidence: ${(a.confidence_score * 100).toFixed(0)}% &middot; Topics: ${esc(a.key_topics || 'n/a')}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadEscalations() {
+      const data = await fetchJSON('/api/escalations');
+      const container = document.getElementById('escalation-list');
+      document.getElementById('escalation-count').textContent = data.escalations.length;
+
+      if (!data.escalations.length) {
+        container.innerHTML = '<div class="empty-state">No escalations yet</div>';
+        return;
+      }
+
+      container.innerHTML = data.escalations.map(e => `
+        <div class="escalation-item">
+          <div class="esc-info">
+            <div>
+              <span class="severity-dot severity-${e.severity}"></span>
+              <strong style="font-size:13px">${e.escalation_target.replace('_', ' ').toUpperCase()}</strong>
+              <span class="tag tag-${e.status === 'open' ? 'critical' : e.status === 'resolved' ? 'positive' : 'neutral'}">${e.status}</span>
+              ${e.customer_name ? `<span style="font-size:12px;color:#64748b"> &middot; Customer: ${esc(e.customer_name)} (${e.customer_tier})</span>` : ''}
+            </div>
+            <div class="post-content" style="margin-top:6px">${esc(e.post_content)}</div>
+            ${e.notes ? `<div class="notes">${esc(e.notes)}</div>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadResponses() {
+      const data = await fetchJSON('/api/responses');
+      const container = document.getElementById('response-list');
+      document.getElementById('response-count').textContent = data.items.length;
+
+      if (!data.items.length) {
+        container.innerHTML = '<div class="empty-state">No draft responses yet</div>';
+        return;
+      }
+
+      container.innerHTML = data.items.map(r => `
+        <div class="response-item">
+          <div class="post-meta">
+            <span class="author">@${esc(r.author_handle)}</span>
+            <span class="tag tag-platform">${r.platform}</span>
+            <span class="tag tag-${r.status === 'draft' ? 'new' : r.status === 'approved' ? 'positive' : r.status === 'posted' ? 'resolved' : 'critical'}">${r.status}</span>
+            <span class="meta">drafted by ${r.drafted_by}</span>
+          </div>
+          <div style="font-size:12px;color:#64748b;margin:4px 0">Original: ${esc(r.original_post || '').substring(0, 100)}...</div>
+          <div class="response-text">${esc(r.response_text)}</div>
+          ${r.status === 'draft' ? `
+            <button class="btn btn-primary btn-sm" onclick="approveResponse(${r.id})">Approve</button>
+            <button class="btn btn-sm" style="background:#f1f5f9" onclick="rejectResponse(${r.id})">Reject</button>
+          ` : ''}
+        </div>
+      `).join('');
+    }
+
+    async function loadIncidents() {
+      const data = await fetchJSON('/api/incidents/active');
+      const container = document.getElementById('incident-list');
+      document.getElementById('incident-count').textContent = data.count;
+
+      if (!data.incidents.length) {
+        container.innerHTML = '<div class="empty-state">No active incidents</div>';
+        return;
+      }
+
+      container.innerHTML = data.incidents.map(i => `
+        <div class="incident-item">
+          <div style="display:flex;gap:8px;align-items:center">
+            <span class="severity-dot severity-${i.severity}"></span>
+            <span class="inc-title">${esc(i.title)}</span>
+            <span class="tag tag-${i.severity === 'critical' ? 'critical' : 'neutral'}">${i.severity}</span>
+            <span class="tag" style="background:#f1f5f9">${i.category}</span>
+            <span class="tag tag-${i.status === 'active' ? 'negative' : 'neutral'}">${i.status}</span>
+          </div>
+          <div class="inc-desc">${esc(i.description)}</div>
+        </div>
+      `).join('');
+    }
+
+    async function approveResponse(id) {
+      await fetch(`/api/responses/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved', approved_by: 'Dashboard User' })
+      });
+      refreshAll();
+    }
+
+    async function rejectResponse(id) {
+      await fetch(`/api/responses/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected', approved_by: 'Dashboard User' })
+      });
+      refreshAll();
+    }
+
+    async function resetData() {
+      if (!confirm('Reset all data to original demo state? This will clear all analysis results, escalations, and responses.')) return;
+      await fetch('/api/reset', { method: 'POST' });
+      refreshAll();
+    }
+
+    function esc(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    async function refreshAll() {
+      await Promise.all([
+        loadStats(),
+        loadUnreviewed(),
+        loadAnalyzed(),
+        loadEscalations(),
+        loadResponses(),
+        loadIncidents()
+      ]);
+    }
+
+    refreshAll();
+    setInterval(refreshAll, 15000);
+  </script>
+</body>
+</html>
